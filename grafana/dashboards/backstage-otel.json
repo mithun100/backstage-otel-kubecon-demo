@@ -1,0 +1,51 @@
+{
+  "title": "Backstage OTel Demo",
+  "uid": "backstage-otel-demo",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-15m", "to": "now" },
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Note",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "Panels below use the generic `http.server.request.duration` metric (from OTel's Node HTTP auto-instrumentation), filtered by `http_route`. Backstage doesn't emit dedicated `scaffolder_task_duration`/`catalog_refresh_duration` metrics out of the box — that would need custom instrumentation, which is out of scope for this demo's single-file punchline."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Scaffolder task API duration (p95)",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{http_route=~\".*scaffolder.*\"}[5m])) by (le))",
+          "legendFormat": "p95 scaffolder route duration"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Catalog API duration (p95)",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{http_route=~\".*catalog.*\"}[5m])) by (le))",
+          "legendFormat": "p95 catalog route duration"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    }
+  ]
+}

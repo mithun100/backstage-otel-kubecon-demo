@@ -73,4 +73,8 @@ COPY --chown=node:node packages/backend/src/instrumentation.ts ./packages/backen
 # --require preloads the OTel instrumentation before any Backstage module loads (see src/instrumentation.ts).
 # --experimental-strip-types lets Node run that .ts file directly. Passed to this CMD only, so it never
 # affects the yarn/node calls used earlier in this build.
-CMD ["node", "--experimental-strip-types", "--no-warnings", "--require", "./packages/backend/src/instrumentation.ts", "packages/backend", "--config", "app-config.yaml", "--config", "app-config.production.yaml"]
+#
+# Uses app-config.docker.yaml (in-memory SQLite) rather than app-config.production.yaml (which requires a
+# real Postgres) to keep the demo stack to exactly the observability components — swap this for a real
+# deployment.
+CMD ["node", "--experimental-strip-types", "--no-warnings", "--require", "./packages/backend/src/instrumentation.ts", "packages/backend", "--config", "app-config.yaml", "--config", "app-config.docker.yaml"]

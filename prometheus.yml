@@ -1,0 +1,10 @@
+# Prometheus scrape config for the docker-compose demo path.
+# Scrapes the OTel Collector's Prometheus exporter endpoint, not Backstage
+# directly — the Collector is the single point all telemetry flows through.
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ['otel-collector:8889']

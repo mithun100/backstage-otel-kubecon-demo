@@ -1,0 +1,34 @@
+# Config overlay used when running the compiled backend in a container
+# (docker-compose and Kubernetes). Layered on top of app-config.yaml via
+# `--config app-config.yaml --config app-config.docker.yaml`.
+#
+# Differs from app-config.production.yaml (which expects a real Postgres and
+# is left as reference/boilerplate for an actual production deployment): this
+# demo intentionally uses in-memory SQLite to avoid an extra stateful service,
+# keeping the on-stage stack to exactly the four observability components.
+app:
+  baseUrl: http://localhost:7007
+
+backend:
+  baseUrl: http://localhost:7007
+  listen: ':7007'
+  cors:
+    origin: http://localhost:7007
+  database:
+    client: better-sqlite3
+    connection: ':memory:'
+
+catalog:
+  # Paths are relative to the backend process' cwd, which in the container
+  # image is /app (see packages/backend/Dockerfile), not packages/backend.
+  locations:
+    - type: file
+      target: ./examples/entities.yaml
+    - type: file
+      target: ./examples/template/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ./examples/org.yaml
+      rules:
+        - allow: [User, Group]
