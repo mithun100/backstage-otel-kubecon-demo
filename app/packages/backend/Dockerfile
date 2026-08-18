@@ -67,4 +67,10 @@ COPY --chown=node:node examples ./examples
 COPY --chown=node:node packages/backend/dist/bundle.tar.gz app-config*.yaml ./
 RUN tar xzf bundle.tar.gz && rm bundle.tar.gz
 
-CMD ["node", "packages/backend", "--config", "app-config.yaml", "--config", "app-config.production.yaml"]
+# The instrumentation file is plain TypeScript, copied in and run straight from source (no separate compile step).
+COPY --chown=node:node packages/backend/src/instrumentation.ts ./packages/backend/src/instrumentation.ts
+
+# --require preloads the OTel instrumentation before any Backstage module loads (see src/instrumentation.ts).
+# --experimental-strip-types lets Node run that .ts file directly. Passed to this CMD only, so it never
+# affects the yarn/node calls used earlier in this build.
+CMD ["node", "--experimental-strip-types", "--no-warnings", "--require", "./packages/backend/src/instrumentation.ts", "packages/backend", "--config", "app-config.yaml", "--config", "app-config.production.yaml"]
