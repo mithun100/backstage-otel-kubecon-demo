@@ -4,7 +4,10 @@ kind: Template
 metadata:
   name: example-nodejs-template
   title: Example Node.js Template
-  description: An example template for the scaffolder that creates a simple Node.js service
+  description: >-
+    An example template for the scaffolder that creates a simple Node.js service.
+    Local-only (no GitHub publish step) so it runs deterministically offline —
+    used by demo.sh to produce a real, traced scaffolder task.
 spec:
   owner: user:guest
   type: service
@@ -23,17 +26,13 @@ spec:
           ui:autofocus: true
           ui:options:
             rows: 5
-    - title: Choose a location
-      required:
-        - repoUrl
-      properties:
-        repoUrl:
-          title: Repository Location
-          type: string
-          ui:field: RepoUrlPicker
-          ui:options:
-            allowedHosts:
-              - github.com
+        waitSeconds:
+          title: Simulated work duration (seconds)
+          type: number
+          description: >-
+            Artificial delay for the "Simulate Work" step — demo.sh bumps this
+            up with --slow to produce a visible bottleneck span in the trace.
+          default: 1
 
   # These steps are executed in the scaffolder backend, using data that we gathered
   # via the parameters above.
@@ -47,24 +46,13 @@ spec:
         values:
           name: ${{ parameters.name }}
 
-    # This step publishes the contents of the working directory to GitHub.
-    # If you or your organization prefer another default branch name over 'main'
-    # you can change that here.
-    - id: publish
-      name: Publish
-      action: publish:github
+    # Stands in for "real" work (e.g. a slow CI call). Kept local/offline instead
+    # of publish:github so the demo has no external dependency or side effects.
+    - id: simulate-work
+      name: Simulate Work
+      action: debug:wait
       input:
-        description: This is ${{ parameters.name }}
-        repoUrl: ${{ parameters.repoUrl }}
-        defaultBranch: 'main'
-
-    # The final step is to register our new component in the catalog.
-    - id: register
-      name: Register
-      action: catalog:register
-      input:
-        repoContentsUrl: ${{ steps['publish'].output.repoContentsUrl }}
-        catalogInfoPath: '/catalog-info.yaml'
+        seconds: ${{ parameters.waitSeconds }}
 
     # Let's notify the user that the template has completed using the Notification action
     - id: notify
@@ -77,6 +65,7 @@ spec:
         title: 'Template executed'
         info: 'Your template has been executed'
         severity: 'normal'
+
 
   # Outputs are displayed to the user after a successful execution of the template.
   output:

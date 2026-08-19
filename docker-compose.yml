@@ -12,6 +12,10 @@ services:
     environment:
       # Container-to-container DNS name, not localhost — see instrumentation.ts.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # Forwarded from the host shell so demo.sh can flip tracing on/off
+      # (see NodeSDK's own OTEL_SDK_DISABLED support). Compose only passes
+      # through host env vars that are explicitly referenced here.
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
     depends_on:
       - otel-collector
     networks:

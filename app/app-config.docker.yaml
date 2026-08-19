@@ -18,6 +18,15 @@ backend:
     client: better-sqlite3
     connection: ':memory:'
 
+# Guest auth normally refuses to issue tokens when NODE_ENV=production (a real
+# safety guard). This demo has no real users/auth to protect — deliberately
+# relaxed here, not silently bypassed, so demo.sh can call the API directly
+# without a browser. Auth/RBAC hardening is explicitly out of scope (see SPEC.md).
+auth:
+  providers:
+    guest:
+      dangerouslyAllowOutsideDevelopment: true
+
 catalog:
   # Paths are relative to the backend process' cwd, which in the container
   # image is /app (see packages/backend/Dockerfile), not packages/backend.
