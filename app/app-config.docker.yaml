@@ -17,6 +17,12 @@ backend:
   database:
     client: better-sqlite3
     connection: ':memory:'
+  # fetch:plain refuses to read from arbitrary hosts by default (real SSRF
+  # protection). Explicitly allow-listing the Toxiproxy-fronted Gitea host —
+  # not disabling the check, just scoping it to the one host the demo needs.
+  reading:
+    allow:
+      - host: 'toxiproxy:8080'
 
 # Guest auth normally refuses to issue tokens when NODE_ENV=production (a real
 # safety guard). This demo has no real users/auth to protect — deliberately

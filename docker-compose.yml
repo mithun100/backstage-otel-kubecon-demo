@@ -18,6 +18,41 @@ services:
       OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
     depends_on:
       - otel-collector
+      - toxiproxy
+    networks:
+      - otel-demo
+
+  # A real, self-hosted git server (not a mock) — the scaffolder template
+  # fetches a real file from a real repo hosted here, through toxiproxy below.
+  # Admin user + repo are created by scripts/seed-gitea.sh (this image doesn't
+  # auto-create an admin from env vars despite some docs suggesting otherwise).
+  gitea:
+    image: gitea/gitea:1.22
+    container_name: gitea
+    environment:
+      USER_UID: '1000'
+      USER_GID: '1000'
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__server__DOMAIN: gitea
+      GITEA__server__ROOT_URL: http://gitea:3000/
+      GITEA__security__INSTALL_LOCK: 'true'
+    ports:
+      - '3002:3000' # host 3002 avoids clashing with Backstage's 3000 convention
+    networks:
+      - otel-demo
+
+  # Shopify's Toxiproxy: a real fault-injection proxy, the same kind used for
+  # chaos engineering. Sits in front of Gitea; demo.sh injects real network
+  # latency (or takes the connection down entirely) through its admin API to
+  # simulate "your git provider is having a bad day" — on command, reliably.
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    container_name: toxiproxy
+    ports:
+      - '8474:8474' # Toxiproxy admin API
+      - '8080:8080' # proxied path to Gitea (see scripts/seed-gitea.sh)
+    depends_on:
+      - gitea
     networks:
       - otel-demo
 

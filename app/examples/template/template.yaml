@@ -6,8 +6,8 @@ metadata:
   title: Example Node.js Template
   description: >-
     An example template for the scaffolder that creates a simple Node.js service.
-    Local-only (no GitHub publish step) so it runs deterministically offline —
-    used by demo.sh to produce a real, traced scaffolder task.
+    Fetches a real file from a real self-hosted git server (Gitea) through
+    Toxiproxy — used by demo.sh to produce a real, traced scaffolder task.
 spec:
   owner: user:guest
   type: service
@@ -26,13 +26,6 @@ spec:
           ui:autofocus: true
           ui:options:
             rows: 5
-        waitSeconds:
-          title: Simulated work duration (seconds)
-          type: number
-          description: >-
-            Artificial delay for the "Simulate Work" step — demo.sh bumps this
-            up with --slow to produce a visible bottleneck span in the trace.
-          default: 1
 
   # These steps are executed in the scaffolder backend, using data that we gathered
   # via the parameters above.
@@ -46,13 +39,17 @@ spec:
         values:
           name: ${{ parameters.name }}
 
-    # Stands in for "real" work (e.g. a slow CI call). Kept local/offline instead
-    # of publish:github so the demo has no external dependency or side effects.
-    - id: simulate-work
-      name: Simulate Work
-      action: debug:wait
+    # Every real template calls out to SOMETHING external — here, a real git
+    # server (Gitea), fetched through Toxiproxy. demo.sh injects real network
+    # latency into Toxiproxy (or takes the connection down) to simulate "your
+    # git provider is having a bad day" — a genuine outbound HTTP call, so
+    # OTel's auto-instrumentation captures it as a real span with real duration.
+    - id: fetch-from-git-provider
+      name: Fetch From Git Provider
+      action: fetch:plain:file
       input:
-        seconds: ${{ parameters.waitSeconds }}
+        url: http://toxiproxy:8080/demo-admin/demo-service-template/raw/branch/main/README.md
+        targetPath: ./git-provider-response.md
 
     # Let's notify the user that the template has completed using the Notification action
     - id: notify
