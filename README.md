@@ -118,13 +118,17 @@ Press **Enter** at each pause. **Check:**
 ### Step 2 — Good case, from the UI
 
 1. Open http://localhost:7007 and sign in as **Guest**.
-2. **Create** → **Example Node.js Template** → type any name → **Review** → **Create**.
+2. **Create** → **Example Node.js Template** → Name: `demo-service-template` → **Review** → **Create**.
 3. In Jaeger: Service `backstage-backend`, **Min Duration** `300ms`, **Find Traces**.
 
 **Check:** all 4 steps go green. Jaeger shows a `GET` trace (1 span, ~0.5 s,
 "Fetch From Git Provider") and a `POST` trace (~76 spans, ~0.5 s, "Register
 In Catalog"). Ignore `TaskPipelineLoop` and `.../eventstream`: those are
 background jobs and the browser's live progress stream.
+
+**Check:** the **Catalog** page lists a component named `demo-service-template`.
+On this branch the register step always registers that fixed repo, whatever
+name you type.
 
 ### Step 3 — Slow case (degraded git provider)
 
