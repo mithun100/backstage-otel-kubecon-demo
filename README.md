@@ -54,6 +54,7 @@ prometheus.yml                   Scrapes the Collector's metrics endpoint
 grafana/                         Auto-provisioned datasource + dashboard
 scripts/seed-gitea.sh            Idempotent: creates Gitea admin user, a real
                                   repo (auto-init), and the Toxiproxy proxy
+scripts/scenarios/               One command per failure scenario (see below)
 demo.sh                          The whole story, scripted and reproducible
 ```
 
@@ -87,6 +88,116 @@ all of them on stage. Two ways to find the one that matters:
    Click it — its tags include `url.full` (the real repo path) and
    `server.address: toxiproxy`, proving it's a genuine network call, not a
    fake sleep.
+
+## Live demo: step by step
+
+Run everything from the repo root. Each step lists what you should see; if
+you're ever unsure what's active, run `./scripts/scenarios/status.sh`.
+
+### Step 0 — Pre-flight
+
+```bash
+git branch --show-current          # expect: main
+docker info >/dev/null && echo "docker OK"
+```
+
+**Check:** prints `main` and `docker OK`. If Docker fails, start Docker Desktop.
+
+### Step 1 — Start the stack and run the scripted story
+
+```bash
+./demo.sh
+```
+
+Press **Enter** at each pause. **Check:**
+- BEFORE: http://localhost:16686 lists **no** `backstage-backend` service.
+- AFTER: the catalog curls return `HTTP 200`.
+- The scaffolder task polls to `status: completed`.
+- The printed Jaeger link opens a single `GET` span of about **0.5 s**.
+
+### Step 2 — Good case, from the UI
+
+1. Open http://localhost:7007 and sign in as **Guest**.
+2. **Create** → **Example Node.js Template** → type any name → **Review** → **Create**.
+3. In Jaeger: Service `backstage-backend`, **Min Duration** `300ms`, **Find Traces**.
+
+**Check:** all 4 steps go green. Jaeger shows a `GET` trace (1 span, ~0.5 s,
+"Fetch From Git Provider") and a `POST` trace (~76 spans, ~0.5 s, "Register
+In Catalog"). Ignore `TaskPipelineLoop` and `.../eventstream`: those are
+background jobs and the browser's live progress stream.
+
+### Step 3 — Slow case (degraded git provider)
+
+```bash
+./scripts/scenarios/slow-on.sh     # adds +8000 ms on top of the ~500 ms baseline
+```
+
+**Check:** the output lists both `baseline_latency` and `outage_latency`.
+
+Trigger the template again from the UI. **Check:** "Fetch From Git Provider"
+spins for about **9 s**. In Jaeger, set **Min Duration** to `5s`: the same `GET`
+and `POST` traces now take about **8.5 s** instead of ~0.5 s.
+
+```bash
+./scripts/scenarios/slow-off.sh
+```
+
+**Check:** only `baseline_latency` is left.
+
+### Step 4 — Network cut (nothing is listening)
+
+```bash
+./scripts/scenarios/down.sh        # disables the Toxiproxy proxy
+```
+
+**Check:** `enabled=False`.
+
+Trigger the template again. **Check:** the task fails at "Fetch From Git
+Provider" and the later steps show as skipped. In Jaeger, clear Min Duration,
+set **Tags** to `error=true` and **Lookback** to `Last 15 minutes`:
+- a `GET` error span under 1 ms with `ECONNREFUSED`, and
+- a separate `tcp.connect` trace that **also** has an error.
+
+```bash
+./scripts/scenarios/up.sh
+```
+
+**Check:** `enabled=True`.
+
+### Step 5 — Dependency crashed (the process is gone)
+
+```bash
+./scripts/scenarios/kill-gitea.sh  # stops the Gitea container
+```
+
+**Check:** `gitea: exited`.
+
+Trigger the template again. **Check:** the task fails at the same step. Jaeger
+`error=true` shows:
+- a `GET` error with `ECONNRESET`, and
+- a separate `tcp.connect` trace with **no** error (Toxiproxy accepted the
+  connection; Gitea behind it was gone).
+
+That `tcp.connect` difference is how you tell a network cut from a crashed
+dependency. The two spans are separate traces, matched by timestamp, not
+parent and child.
+
+```bash
+./scripts/scenarios/revive-gitea.sh
+```
+
+**Check:** `gitea: running`.
+
+### Step 6 — Reset before the next run
+
+```bash
+./scripts/scenarios/normal.sh
+```
+
+**Check:** Gitea running, `enabled=True`, and only `baseline_latency` active.
+
+**Grafana** (http://localhost:3001): panels use a rolling 5-minute window, so
+trigger a task just before switching to it or the graphs will look empty.
 
 ## Known limitations (flagged, not hidden)
 
