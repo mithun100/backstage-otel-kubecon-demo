@@ -51,6 +51,16 @@ spec:
         url: http://toxiproxy:8080/demo-admin/demo-service-template/raw/branch/main/README.md
         targetPath: ./git-provider-response.md
 
+    # Registers the repo as a real Catalog component. Fixed target (not
+    # per-task) since there's no publish step creating a new repo each run —
+    # see README for why. Idempotent: re-registering the same location is a no-op.
+    - id: register
+      name: Register In Catalog
+      action: catalog:register
+      input:
+        catalogInfoUrl: http://toxiproxy:8080/demo-admin/demo-service-template/raw/branch/main/catalog-info.yaml
+        optional: true
+
     # Let's notify the user that the template has completed using the Notification action
     - id: notify
       name: Notify
@@ -67,8 +77,6 @@ spec:
   # Outputs are displayed to the user after a successful execution of the template.
   output:
     links:
-      - title: Repository
-        url: ${{ steps['publish'].output.remoteUrl }}
       - title: Open in catalog
         icon: catalog
         entityRef: ${{ steps['register'].output.entityRef }}

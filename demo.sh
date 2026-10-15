@@ -9,10 +9,10 @@
 # Usage:
 #   ./demo.sh [--slow] [--mode=compose|k8s]
 #
-#   --slow          Injects real network latency into Toxiproxy in front of
-#                   Gitea, simulating "your git provider is having a bad day" —
-#                   a real, traceable HTTP call, not an in-process sleep, so
-#                   it shows up as a genuine wide span in Jaeger.
+#   --slow          Stacks an extra, large latency toxic on top of the always-on
+#                   baseline (X normal -> X+Y degraded), simulating "your git
+#                   provider is having a bad day" — a real, traceable HTTP
+#                   call, not an in-process sleep, so it's a genuine wide span.
 #   --mode=compose  Default. Assumes `docker compose` stack (see docker-compose.yml).
 #   --mode=k8s      Not implemented yet in this repo.
 #
@@ -46,7 +46,8 @@ JAEGER_URL="http://localhost:16686"
 GRAFANA_URL="http://localhost:3001"
 TOXIPROXY_URL="http://localhost:8474"
 
-SLOW_LATENCY_MS=8000 # Toxiproxy injects this much real latency on the Gitea fetch
+BASELINE_LATENCY_MS=500  # X: seeded by scripts/seed-gitea.sh, always on
+OUTAGE_LATENCY_MS=8000   # Y: added on top by --slow, so total is X+Y, not just Y
 
 banner() {
   echo
@@ -88,8 +89,9 @@ wait_for_backend
 echo "Setting up the real git provider (Gitea + Toxiproxy)..."
 "$(dirname "$0")/scripts/seed-gitea.sh"
 
-# Always start from a clean, fast state regardless of how the last run ended.
-curl -s -X DELETE "$TOXIPROXY_URL/proxies/gitea/toxics/latency_downstream" >/dev/null 2>&1 || true
+# Always start from a clean baseline-only state regardless of how the last
+# run ended — never remove baseline_latency, that one stays on permanently.
+curl -s -X DELETE "$TOXIPROXY_URL/proxies/gitea/toxics/outage_latency" >/dev/null 2>&1 || true
 
 banner "BEFORE: telemetry disabled"
 echo "Backend already started with OTEL_SDK_DISABLED=true (NodeSDK's own standard kill switch)."
@@ -122,11 +124,15 @@ for i in 1 2 3; do
 done
 
 banner "Triggering a real scaffolder task"
+echo "Normal case: fetching from your git provider takes ~${BASELINE_LATENCY_MS}ms —"
+echo "realistic network latency to a real external dependency, not microseconds."
 if [[ "$SLOW" == true ]]; then
-  echo "Your git provider is having a bad day — injecting ${SLOW_LATENCY_MS}ms of real"
-  echo "network latency into Toxiproxy (the same kind of tool used for chaos engineering)."
+  echo
+  echo "Your git provider is having a bad day — stacking an EXTRA ${OUTAGE_LATENCY_MS}ms of"
+  echo "real network latency on top of the ${BASELINE_LATENCY_MS}ms baseline (via Toxiproxy,"
+  echo "the same kind of tool used for chaos engineering). Total: ~$(( (BASELINE_LATENCY_MS + OUTAGE_LATENCY_MS) / 1000 ))s — about $(( (BASELINE_LATENCY_MS + OUTAGE_LATENCY_MS) / BASELINE_LATENCY_MS ))x slower than normal."
   curl -s -X POST -H "Content-Type: application/json" \
-    -d "{\"type\":\"latency\",\"attributes\":{\"latency\":$SLOW_LATENCY_MS}}" \
+    -d "{\"name\":\"outage_latency\",\"type\":\"latency\",\"attributes\":{\"latency\":$OUTAGE_LATENCY_MS}}" \
     "$TOXIPROXY_URL/proxies/gitea/toxics" >/dev/null
 fi
 
@@ -161,21 +167,26 @@ done
 
 banner "See it live"
 echo "A single trace here can have hundreds of spans — Backstage's own internal"
-echo "bookkeeping (DB writes, event logging) for every task step. Don't try to"
-echo "explain all of them. Point at ONE: the 'GET toxiproxy' span."
-echo "That's the real outbound call to your git provider — with --slow it's the"
-echo "one wide bar that obviously stands out in the waterfall."
+echo "bookkeeping (DB writes, event logging) for every task step, PLUS unrelated"
+echo "background jobs (search indexing, catalog cleanup) running on their own"
+echo "schedule. Don't browse the raw trace list — it's dominated by that noise."
+echo "Use the direct link below, or filter Jaeger's search by Min Duration >"
+echo "${BASELINE_LATENCY_MS}ms to isolate just the git-provider call."
+echo
+echo "Point at ONE span: 'GET' targeting toxiproxy. That's the real outbound"
+echo "call to your git provider — normally ~${BASELINE_LATENCY_MS}ms; with --slow it's the"
+echo "one wide bar that obviously stands out, multiple seconds long."
 echo
 
 FLUSH_WAIT=6
 if [[ "$SLOW" == true ]]; then
-  FLUSH_WAIT=$(( (SLOW_LATENCY_MS / 1000) + 6 ))
+  FLUSH_WAIT=$(( ((BASELINE_LATENCY_MS + OUTAGE_LATENCY_MS) / 1000) + 6 ))
 fi
 echo "Waiting ${FLUSH_WAIT}s for the task to fully finish and the collector to flush..."
 sleep "$FLUSH_WAIT"
 
 if [[ "$SLOW" == true ]]; then
-  curl -s -X DELETE "$TOXIPROXY_URL/proxies/gitea/toxics/latency_downstream" >/dev/null 2>&1 || true
+  curl -s -X DELETE "$TOXIPROXY_URL/proxies/gitea/toxics/outage_latency" >/dev/null 2>&1 || true
 fi
 
 TRACE_ID=$(python3 -c "
